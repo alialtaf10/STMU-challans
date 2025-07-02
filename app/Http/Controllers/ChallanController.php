@@ -146,13 +146,28 @@ class ChallanController extends Controller
         return $pdf->download("challan-{$student->reg_no}.pdf");
     }
 
-    protected function generateChallan($student, $semesterFee)
+    protected function generateChallan($student, $semesterFee, $isInstallment = false, $calculatedTotal = null)
     {
-        $total = $this->calculateTotalFee($student);
+        // Use the calculated total if provided, otherwise calculate normally
+        $total = $calculatedTotal ?? $this->calculateTotalFee($student, $semesterFee);
     
-        // Check if semesterFee is from student_fees (has challan_id)
-        $challanId = $semesterFee->challan_id ?? null;
-        $kuickpayId = $semesterFee->kuickpay_id ?? null;
+        // Get and increment the challan_id from the database
+        $challanIdRecord = \DB::table('challan_ids')->first();
+        $nextChallanId = $challanIdRecord ? $challanIdRecord->challan_id + 1 : 1;
+        
+        // Update the database with the next challan_id
+        \DB::table('challan_ids')->updateOrInsert(
+            ['id' => 1], 
+            ['challan_id' => $nextChallanId]
+        );
+    
+        // Generate IDs - don't store them in student_fees
+        $kuickpayId = '28010' . $nextChallanId;
+        
+        // Format the display challan number (not stored in DB)
+        $displayChallanNo = $isInstallment 
+            ? $nextChallanId
+            : $nextChallanId;
     
         $data = [
             'student' => $student,
@@ -160,13 +175,15 @@ class ChallanController extends Controller
             'total' => $total,
             'issue_date' => now()->format('d-M-y'),
             'due_date' => now()->addDays(15)->format('d-M-y'),
-            'challan_no' => $challanId,
+            'challan_no' => $displayChallanNo,
             'kuickpay_id' => $kuickpayId,
             'amount_in_words' => $this->numberToWords($total),
         ];
     
         return view('challan.template', $data);
     }
+    
+    
     protected function calculateTotalFee($student)
     {
         $studentFee = \App\Models\StudentFee::where('student_id', $student->id)->latest()->first();
@@ -586,6 +603,60 @@ class ChallanController extends Controller
             'installment2',
             'scholarshipPercentage'
         ));
+    }
+
+    public function generateInstallmentChallan(Student $student, $installmentNumber)
+    {
+        $semesterFee = StudentFee::with(['semester', 'feeType', 'term'])
+            ->where('student_id', $student->id)
+            ->where('status', 'updated')
+            ->firstOrFail();
+    
+        $heads = $this->getFeeHeads();
+    
+        $isVaried = strtolower($semesterFee->feeType->title) === 'varied';
+        $tuitionFee = $isVaried ? $semesterFee->tuition_fee * $student->credit_hrs : $semesterFee->tuition_fee;
+        $scholarshipPercentage = $this->calculateScholarship($student);
+        $scholarshipAmount = ($tuitionFee * $scholarshipPercentage) / 100;
+        $tuitionAfterScholarship = $tuitionFee - floor($scholarshipAmount);
+    
+        // Create a temporary fee object for display only
+        $installmentFee = clone $semesterFee;
+        $installmentFee->installment_number = $installmentNumber;
+        
+        $total = 0; // Initialize total
+        
+        foreach ($heads as $key => $label) {
+            $value = floatval($semesterFee->$key ?? 0);
+            if ($key === 'tuition_fee') {
+                $value = $tuitionAfterScholarship;
+            }
+    
+            if (in_array($key, ['special_discount', 'tuition_fee_discount'])) {
+                $value = 0 - $value;
+            }
+    
+            $half = floor($value / 2);
+            $remainder = $value - ($half * 2);
+            
+            if ($installmentNumber == 1) {
+                $installmentValue = $half + $remainder;
+            } else {
+                $installmentValue = $half;
+            }
+            
+            $installmentFee->$key = $installmentValue;
+            
+            // Calculate total based on installment values
+            if (in_array($key, ['special_discount', 'tuition_fee_discount'])) {
+                $total -= abs($installmentValue);
+            } else {
+                $total += $installmentValue;
+            }
+        }
+    
+        // Generate the challan with the calculated installment total
+        return $this->generateChallan($student, $installmentFee, true, $total);
     }
 
 }

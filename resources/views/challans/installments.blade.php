@@ -21,6 +21,12 @@
                             <td>Rs. {{ number_format(array_sum($installment1), 2) }}</td>
                         </tr>
                     </table>
+                    <div class="text-end mt-3">
+                        <a href="{{ route('challans.installment-challan', ['student' => $student->id, 'installmentNumber' => 1]) }}" 
+                           class="btn btn-primary" target="_blank">
+                            Generate Challan
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
@@ -40,6 +46,12 @@
                             <td>Rs. {{ number_format(array_sum($installment2), 2) }}</td>
                         </tr>
                     </table>
+                    <div class="text-end mt-3">
+                        <a href="{{ route('challans.installment-challan', ['student' => $student->id, 'installmentNumber' => 2]) }}" 
+                           class="btn btn-primary" target="_blank">
+                            Generate Challan
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>

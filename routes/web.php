@@ -112,6 +112,8 @@ Route::middleware(['auth'])->group(function () {
     // Route::get('/students/{student}/challans/{semesterFee}', [ChallanController::class, 'show'])->name('challans.show');
 
     Route::get('challans/installments/{student}', [ChallanController::class, 'viewInstallments'])->name('challans.installments');
+    Route::get('/students/{student}/installments/challan/{installmentNumber}', [ChallanController::class, 'generateInstallmentChallan'])
+    ->name('challans.installment-challan');
 
 
 
