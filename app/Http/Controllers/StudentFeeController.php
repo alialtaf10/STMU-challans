@@ -13,8 +13,25 @@ class StudentFeeController extends Controller
 {
     public function approvedFees()
     {
+        // Get all student IDs who have installments
+        $studentsWithInstallments = Installment::pluck('student_id')->toArray();
+
         $studentFees = StudentFee::with(['student', 'term', 'semester'])
             ->whereIn('status', ['updated', 'approved'])
+            ->whereNotIn('student_id', $studentsWithInstallments)
+            ->get();
+
+        return view('student_fees.updated', compact('studentFees'));
+    }
+
+    public function approvedInstallmentStudents()
+    {
+        // Get all student IDs who have installments
+        $studentsWithInstallments = Installment::pluck('student_id')->toArray();
+
+        $studentFees = StudentFee::with(['student', 'term', 'semester'])
+            ->whereIn('status', ['updated', 'approved'])
+            ->whereIn('student_id', $studentsWithInstallments)
             ->get();
 
         return view('student_fees.updated', compact('studentFees'));
@@ -237,12 +254,56 @@ class StudentFeeController extends Controller
 
     public function approvedList()
     {
+        // Get all student IDs who have installments
+        $studentsWithInstallments = Installment::pluck('student_id')->toArray();
+    
         $approvedFees = StudentFee::with(['student', 'feeType', 'term'])
             ->where('status', 'approved')
+            ->whereNotIn('student_id', $studentsWithInstallments)
+            ->get();
+    
+        return view('student_fees.approved_list', compact('approvedFees'));
+    }
+
+    public function sentEmailList()
+    {
+        // Get all student IDs who have installments
+        $studentsWithInstallments = Installment::pluck('student_id')->toArray();
+    
+        $approvedFees = StudentFee::with(['student', 'feeType', 'term'])
+            ->where('status', 'email_sent')
+            ->whereNotIn('student_id', $studentsWithInstallments)
+            ->get();
+    
+        return view('student_fees.approved_list', compact('approvedFees'));
+    }
+
+    public function approvedStudentInstallments()
+    {
+        // Get all student IDs who have installments
+        $studentsWithInstallments = Installment::pluck('student_id')->toArray();
+
+        $approvedFees = StudentFee::with(['student', 'feeType', 'term'])
+            ->where('status', 'approved')
+            ->whereIn('student_id', $studentsWithInstallments)
             ->get();
 
         return view('student_fees.approved_list', compact('approvedFees'));
     }
+
+    public function sentInstallmentList()
+    {
+        // Get all student IDs who have installments
+        $studentsWithInstallments = Installment::where('status', 2)->pluck('student_id')->toArray();
+
+        $approvedFees = StudentFee::with(['student', 'feeType', 'term'])
+            ->where('status', 'approved')
+            ->whereIn('student_id', $studentsWithInstallments)
+            ->get();
+
+        return view('student_fees.approved_list', compact('approvedFees'));
+    }
+
 
     public function sendEmails(Request $request)
     {
@@ -265,11 +326,57 @@ class StudentFeeController extends Controller
                 Mail::to($fee->student->email)->send(
                     new ChallanLinkMail($fee->student, $link)
                 );
+
+                $fee->status = "email_sent";
+                $fee->save();
             }
         }
     
         return redirect()->route('student_fees.approved_list')->with('success', 'Emails sent successfully.');
     }
+
+    public function sendInstallmentEmail(Request $request)
+    {
+        $request->validate([
+            'student_id' => 'required|exists:students,id',
+            'installment_number' => 'required|in:1,2'
+        ]);
     
+        $student = Student::findOrFail($request->student_id);
+        $installment = Installment::firstOrCreate(
+            ['student_id' => $student->id],
+            ['term_id' => $student->term_id, 'status' => 0]
+        );
+    
+        // Update installment status
+        $installment->status = $request->installment_number;
+        $installment->save();
+    
+        // Generate the challan link
+        $fee = StudentFee::where('student_id', $student->id)
+            ->where('status', 'approved')
+            ->first();
+    
+        if (!$fee) {
+            return back()->with('error', 'No approved fee record found for this student');
+        }
+    
+        $link = route('challans.installment-challan', [
+            'student' => $student->id,
+            'installmentNumber' => $request->installment_number
+        ]);
+    
+        // Send email
+        try {
+            Mail::to($student->email)->send(
+                new ChallanLinkMail($student, $link)
+            );
+    
+            return back()->with('success', 'Email sent successfully');
+        } catch (\Exception $e) {
+            return back()->with('error', 'Failed to send email: ' . $e->getMessage());
+        }
+    }
+
 
 }

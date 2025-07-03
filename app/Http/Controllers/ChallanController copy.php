@@ -23,6 +23,7 @@ class ChallanController extends Controller
 
     public function create(Student $student)
     {
+        $scholarship = "";
         $heads = $this->getFeeHeads();
     
         $semesterFee = StudentFee::with(['semester', 'feeType', 'term'])
@@ -49,6 +50,10 @@ class ChallanController extends Controller
         }
     
         $finalScholarship = $this->calculateScholarship($student);
+
+        if($finalScholarship){
+            $scholarship = "Merit Scholarship";
+        }
     
         $scholarship = \DB::table('scholarships')
             ->join('scholarship_types', 'scholarships.scholarship_type_id', '=', 'scholarship_types.id')

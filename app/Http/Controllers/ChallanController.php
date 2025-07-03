@@ -24,6 +24,7 @@ class ChallanController extends Controller
 
     public function create(Student $student)
     {
+        $scholarship = "No Scholarship";
         $heads = $this->getFeeHeads();
     
         $semesterFee = StudentFee::with(['semester', 'feeType', 'term'])
@@ -50,6 +51,10 @@ class ChallanController extends Controller
         }
     
         $finalScholarship = $this->calculateScholarship($student);
+
+        if($finalScholarship){
+            $scholarship = "Merit Scholarship";
+        }
     
         $scholarship = \DB::table('scholarships')
             ->join('scholarship_types', 'scholarships.scholarship_type_id', '=', 'scholarship_types.id')
@@ -237,9 +242,25 @@ class ChallanController extends Controller
 
     protected function calculateScholarship($student)
     {
+        // Get any existing scholarship for the student
+        $scholarship = Scholarship::where('student_id', $student->id)
+            ->where('status', 1)
+            ->with('scholarshipType')
+            ->latest()
+            ->first();
+    
+        // Check for special scholarships (types 4, 6, 7) which override merit scholarships
+        if ($scholarship && in_array($scholarship->scholarshipType->id, [2, 4, 6, 7])) {
+            return [
+                'percentage' => $scholarship->waiver,
+                'name' => $scholarship->scholarshipType->name
+            ];
+        }
+    
+        // Calculate merit scholarship based on HSSC and GPA
         $hssc = $student->hssc_marks;
         $gpa = $student->gpa;
-
+    
         $hsscScholarship = match (true) {
             $hssc >= 85 => 100,
             $hssc >= 80 => 75,
@@ -247,7 +268,7 @@ class ChallanController extends Controller
             $hssc >= 70 => 25,
             default => 0
         };
-
+    
         $gpaScholarship = match (true) {
             $gpa >= 3.90 => 100,
             $gpa >= 3.80 => 75,
@@ -255,8 +276,13 @@ class ChallanController extends Controller
             $gpa >= 3.50 => 25,
             default => 0
         };
-
-        return min($hsscScholarship, $gpaScholarship);
+    
+        $percentage = min($hsscScholarship, $gpaScholarship);
+        
+        return [
+            'percentage' => $percentage,
+            'name' => $percentage > 0 ? 'Merit Scholarship' : 'No Scholarship'
+        ];
     }
 
     protected function numberToWords($number)
@@ -502,31 +528,9 @@ class ChallanController extends Controller
             }
     
             // GPA + HSSC calculation
-            $hssc = $student->hssc_marks;
-            $gpa  = $student->gpa;
-    
-            $hsscScholarship = match (true) {
-                $hssc >= 85 => 100,
-                $hssc >= 80 => 75,
-                $hssc >= 75 => 50,
-                $hssc >= 70 => 25,
-                default     => 0
-            };
-    
-            $gpaScholarship = match (true) {
-                $gpa >= 3.90 => 100,
-                $gpa >= 3.80 => 75,
-                $gpa >= 3.70 => 50,
-                $gpa >= 3.50 => 25,
-                default      => 0
-            };
-    
-            $finalScholarship = min($hsscScholarship, $gpaScholarship);
-    
-            if (in_array($scholarship?->type_id, [4, 6, 7])) {
-                $finalScholarship = $scholarship->waiver;
-                $scholarship_name = $scholarship->scholarshipType->name;
-            }
+            $scholarshipInfo = $this->calculateScholarship($student);
+            $finalScholarship = $scholarshipInfo['percentage'];
+            $scholarshipName = $scholarshipInfo['name'];
     
             // Tuition fee after scholarship
             $tuition = $fee->tuition_fee ?? 0;
@@ -537,7 +541,7 @@ class ChallanController extends Controller
                 'term' => $student->currentTerm->name ?? '',
                 'fee_type' => $fee->feeType->title ?? '',
                 'installment' => $installment,
-                'scholarship' => $scholarship_name,
+                'scholarship' => $scholarshipName,
                 'tuition_fee_discount' => (int) $discountAmount,
                 'fees' => []
             ];
@@ -565,8 +569,11 @@ class ChallanController extends Controller
     {
         $semesterFee = StudentFee::with(['semester', 'feeType', 'term'])
             ->where('student_id', $student->id)
-            ->where('status', 'updated')
+            ->whereIn('status', ['updated', 'approved'])
             ->firstOrFail();
+
+            $installment = Installment::where('student_id', $student->id)->first();
+            $installmentStatus = $installment ? $installment->status : 0;
 
         $heads = $this->getFeeHeads();
 
@@ -575,7 +582,9 @@ class ChallanController extends Controller
 
         $isVaried = strtolower($semesterFee->feeType->title) === 'varied';
         $tuitionFee = $isVaried ? $semesterFee->tuition_fee * $student->credit_hrs : $semesterFee->tuition_fee;
-        $scholarshipPercentage = $this->calculateScholarship($student);
+        $scholarshipInfo = $this->calculateScholarship($student);
+        $scholarshipPercentage = $scholarshipInfo['percentage'];
+        $scholarshipName = $scholarshipInfo['name'];
         $scholarshipAmount = ($tuitionFee * $scholarshipPercentage) / 100;
         $tuitionAfterScholarship = $tuitionFee - floor($scholarshipAmount);
 
@@ -601,7 +610,8 @@ class ChallanController extends Controller
             'heads',
             'installment1',
             'installment2',
-            'scholarshipPercentage'
+            'scholarshipPercentage',
+            'installmentStatus'
         ));
     }
 
@@ -609,14 +619,17 @@ class ChallanController extends Controller
     {
         $semesterFee = StudentFee::with(['semester', 'feeType', 'term'])
             ->where('student_id', $student->id)
-            ->where('status', 'updated')
+            ->whereIn('status', ['updated', 'approved'])
             ->firstOrFail();
     
         $heads = $this->getFeeHeads();
     
         $isVaried = strtolower($semesterFee->feeType->title) === 'varied';
         $tuitionFee = $isVaried ? $semesterFee->tuition_fee * $student->credit_hrs : $semesterFee->tuition_fee;
-        $scholarshipPercentage = $this->calculateScholarship($student);
+        $scholarshipInfo = $this->calculateScholarship($student);
+        $scholarshipPercentage = $scholarshipInfo['percentage'];
+        $scholarshipName = $scholarshipInfo['name'];
+        
         $scholarshipAmount = ($tuitionFee * $scholarshipPercentage) / 100;
         $tuitionAfterScholarship = $tuitionFee - floor($scholarshipAmount);
     

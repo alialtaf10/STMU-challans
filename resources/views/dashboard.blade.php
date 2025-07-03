@@ -18,6 +18,11 @@
                 <a href="{{ route('student_fees.updated') }}" class="btn btn-outline w-full">
                     Pending Challans
                 </a>
+                <a href="{{ route('student_fees-installment.updated') }}" class="btn btn-outline w-full">
+                    Pending Installments
+                </a>
+
+                
             @endif
             
 
@@ -37,6 +42,20 @@
             <a href="{{ route('student_fees.approved_list') }}" class="btn btn-outline w-full">
                 Approved Students
             </a>
+
+            <a href="{{ route('student_fees_installments.approved_list') }}" class="btn btn-outline w-full">
+                Approved Installments
+            </a>
+
+            <a href="{{ route('student_fees.email_sent') }}" class="btn btn-outline w-full">
+                Sent Emails
+            </a>
+
+            <a href="{{ route('student_fees_installment.email_sent') }}" class="btn btn-outline w-full">
+                Sent Emails Installment
+            </a>
+
+            
             @endif
 
             <a href="{{ route('password.change') }}" class="btn btn-sm btn-outline mt-2">Change Password</a>

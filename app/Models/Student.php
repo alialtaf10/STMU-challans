@@ -47,4 +47,9 @@ class Student extends Model
         return $this->hasMany(StudentFee::class);
     }
 
+    public function installments()
+    {
+        return $this->hasOne(Installment::class);
+    }
+
 }

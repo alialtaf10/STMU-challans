@@ -64,6 +64,9 @@ Route::middleware(['auth', 'role:admin'])->group(function () {
 
 
     Route::get('/student-fees/updated', [App\Http\Controllers\StudentFeeController::class, 'approvedFees'])->name('student_fees.updated');
+    Route::get('/student-fees-installment/updated', [App\Http\Controllers\StudentFeeController::class, 'approvedInstallmentStudents'])->name('student_fees-installment.updated');
+    
+
 
     Route::put('/student-fees/{id}/approve', [App\Http\Controllers\StudentFeeController::class, 'approve'])->name('student_fees.approve');
 
@@ -89,10 +92,17 @@ Route::middleware(['auth', 'role:student_affairs'])->group(function () {
 
 
     Route::get('/student-fees/approved', [App\Http\Controllers\StudentFeeController::class, 'approvedList'])->name('student_fees.approved_list');
+    Route::get('/student-fees-installments/approved', [App\Http\Controllers\StudentFeeController::class, 'approvedStudentInstallments'])->name('student_fees_installments.approved_list');
 
     Route::post('/student-fees/send-emails', [App\Http\Controllers\StudentFeeController::class, 'sendEmails'])->name('student_fees.send_emails');
 
     // Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
+
+    Route::post('/installments/send-email', [App\Http\Controllers\StudentFeeController::class, 'sendInstallmentEmail'])->name('installments.send-email');
+    Route::get('/student-fees-installments/email-sent', [App\Http\Controllers\StudentFeeController::class, 'sentInstallmentList'])->name('student_fees_installment.email_sent');
+    Route::get('/student-fees/email-sent', [App\Http\Controllers\StudentFeeController::class, 'sentEmailList'])->name('student_fees.email_sent');
+    
+    
     
 });
 
